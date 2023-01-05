@@ -1,39 +1,40 @@
 import os
-import tkinter as tk
-from tkinter import *
-from tkinter import filedialog
-from tkinter import messagebox
-from PIL import Image, ImageTk
-import os
+from tkinter import BOTTOM, Button, Label, Tk, Toplevel, filedialog, messagebox, PhotoImage
 import comtypes.client
-import pypdf
+from pypdf import PdfReader, PdfWriter
 
 def docx_to_pdf(docx_filename, pdf_filename):
-    # Create a COM object for Word.
+    # Create a COM object for Word
     word = comtypes.client.CreateObject('Word.Application')
+
+    # Read the Word Document.
     try:
-        doc = word.Documents.Open(docx_filename)
-    except comtypes.COMError:
-        messagebox.showerror(title = "Fehler", message = f'Kann {docx_filename} nicht finden.\nWord-Instanz, die die Datei geöffnet hat oder Leerzeichen im Namen?')
-        doc.Close()
+        doc = word.Documents.Open(f'"{docx_filename}"')
+    except comtypes.COMError as e:
+        messagebox.showerror(title = "Fehler", message = f'Kann {docx_filename} nicht finden.\nWord-Datei bereits geöffnet oder Leerzeichen im Namen?')
         word.Quit()
         return
 
+    # Write the pdf
     try:
         doc.SaveAs(pdf_filename, FileFormat=17)
     except comtypes.COMError:
         messagebox.showerror(title = "Fehler", message = f'{pdf_filename} existiert bereits.\nÜbersprungen...')
+        doc.Close()
+        word.Quit()
+        return
 
+    # necessary to quit word instances after a correct run of the pdf generator
     doc.Close()
     word.Quit()
 
-def select_docx_files(select_button):
+def select_docx_files(convert_button):
 
     # Disable the button for unintentional clicks of certain users ;)
-    select_button.config(state="disabled", text="Erzeuge PDFs...")
+    convert_button.config(state="disabled", text="Erzeuge PDFs...")
     
     # close all instances of word to not create a mess...
-    messagebox.showwarning(title = "Bitte alle Word-Fenster schließen!", message = "Bitte schließen Sie alle Word-Fenster und klicken dann auf OK. Dies ist für einen sauberen Ablauf notwendig.\n\nHinweis:\nIm Extremfall schließen Sie diese per Taskmanager.")
+    messagebox.showwarning(title = "Bitte alle Word-Fenster schließen!", message = "Bitte schließen Sie alle Word-Fenster und klicken dann auf OK. Dies ist für einen sauberen Ablauf notwendig.\n\nHinweis:\nIm Extremfall schließen Sie Word-Instanzen per Taskmanager.")
 
     # Open a file selection dialog and get the selected files.
     docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Konvertierung auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
@@ -49,11 +50,14 @@ def select_docx_files(select_button):
         # Convert the Word document to a PDF.
         docx_to_pdf(docx_filename, pdf_filename)
     
-    tk.messagebox.showinfo('Erledigt', 'Die PDFs wurden erzeugt.')
+    show_temp_message('Erledigt', 'Die PDFs wurden erzeugt.')
     #enable the button again to create another batch of PDF files.
-    select_button.config(state="active", text ="Word > PDF")
+    convert_button.config(state="active", text ="Word > PDF")
         
-def remove_metadata():
+def remove_metadata(meta_button):
+
+    meta_button.config(state="disabled", text="Entferne Metadaten...")
+
     # Open the PDF files in read-binary mode
     files = filedialog.askopenfilenames(title='PDFs zum Entfernen von Metadaten auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
 
@@ -68,18 +72,18 @@ def remove_metadata():
             os.rename(file, new_name)
         except PermissionError:
             # If the file is in use, skip it and move on to the next file
-            tk.messagebox.showerror('Fehler', 'Die Datei "{}" wird von einem anderen Programm verwendet und wird daher übersprungen.'.format(file))
+            messagebox.showerror('Fehler', 'Die Datei "{}" wird von einem anderen Programm verwendet und wird daher übersprungen.'.format(file))
         except FileExistsError:
-            tk.messagebox.showerror('Fehler', 'Die Datei "{}" gibt es bereits. Die Originaldatei wurde daher nicht umbenannt. Vorgang abgebrochen.'.format(new_name))
+            messagebox.showerror('Fehler', 'Die Datei "{}" gibt es bereits. Die Ursprungsdatei wurde daher nicht umbenannt. Vorgang abgebrochen.'.format(new_name))
             continue
 
         # Open the PDF in read-binary mode
         with open(new_name, 'rb') as file:
             # Create a PDF object
-            pdf = pypdf.PdfReader(new_name)
+            pdf = PdfReader(new_name)
 
             # Create a PDF object to write the output to
-            output_pdf = pypdf.PdfWriter()
+            output_pdf = PdfWriter()
 
             # Iterate through all pages in the PDF
             for page in pdf.pages:
@@ -102,22 +106,25 @@ def remove_metadata():
             with open(output_file, 'wb') as f:
                 output_pdf.write(f)
 
-    tk.messagebox.showinfo('Erledigt', 'Die Metadaten der PDFs wurden gesäubert. Die originalen Dateien wurden in DATEINAME_orig.pdf umbenannt.')
+    # Reset button to original text
+    meta_button.config(state="active", text ="Metadaten aus PDF löschen")
 
-def show_temp_message(title, message, seconds=3):
+    show_temp_message('Erledigt', 'Die Metadaten der PDFs wurden gelöscht.\nDie Ursprungsdateien wurden in\n DATEINAME_orig.pdf umbenannt.')
+
+def show_temp_message(title, message, seconds=5):
     # Create a new top-level window for the message.
     window = Toplevel()
     window.title(title)
-    
+   
     # Create a label for the message.
-    label = Label(window, text=message, font=("Arial", 25))
+    label = Label(window, text=message, font=("Helvetica", 12))
     label.pack()
     
     # Close the window after a certain number of seconds.
     window.after_idle(lambda: window.after(seconds * 1000, window.destroy))
             
 # Create the main window
-window = tk.Tk()
+window = Tk()
 
 # Set the window title
 window.title("PDF-Tools v1.2 (buc @ hems.de)")
@@ -125,23 +132,21 @@ window.title("PDF-Tools v1.2 (buc @ hems.de)")
 # Set the window size
 window.geometry("560x240")
 
-#load picture
-image1 = Image.open (os.path.dirname(__file__) +"\hla.png")
-pimage = ImageTk.PhotoImage(image1)
+pimage = PhotoImage(file="./hla.png")
 
-label1 = tk.Label(image=pimage)
+label1 = Label(image=pimage)
 label1.image = pimage
 
 #position image
 label1.place(x=0, y= 0)
 
 # Add a button to start cleaning the PDFs
-button = tk.Button(text="Metadaten aus PDF löschen", command=remove_metadata, font=("Helvetica", 14))
-button.pack(side=BOTTOM, pady=10)
+meta_button = Button(text="Metadaten aus PDF löschen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
+meta_button.pack(side=BOTTOM, pady=10)
 
 # Add a button to start converting the docx
-select_button = tk.Button(text ="Word => PDF", command=lambda: select_docx_files(select_button), font=("Helvetica", 14))
-select_button.pack(side=BOTTOM)
+convert_button = Button(text ="Word => PDF", command=lambda: select_docx_files(convert_button), font=("Helvetica", 14))
+convert_button.pack(side=BOTTOM)
 
 # Run the Tkinter event loop
 window.mainloop()
