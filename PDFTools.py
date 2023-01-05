@@ -120,7 +120,7 @@ def show_temp_message(title, message, seconds=3):
 window = tk.Tk()
 
 # Set the window title
-window.title("PDF-Tools v1.2 (buc@hems.de)")
+window.title("PDF-Tools v1.2 (buc∂hems.de)")
 
 # Set the window size
 window.geometry("560x240")
