@@ -1,6 +1,7 @@
 import os
-from tkinter import BOTTOM, Button, Label, Tk, Toplevel, filedialog, messagebox, PhotoImage
+import sys
 import comtypes.client
+from tkinter import BOTTOM, Button, Label, Tk, Toplevel, filedialog, messagebox, PhotoImage
 from pypdf import PdfReader, PdfWriter
 
 def docx_to_pdf(docx_filename, pdf_filename):
@@ -122,9 +123,22 @@ def show_temp_message(title, message, seconds=5):
     
     # Close the window after a certain number of seconds.
     window.after_idle(lambda: window.after(seconds * 1000, window.destroy))
-            
+
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+
+
 # Create the main window
 window = Tk()
+window.iconbitmap(resource_path("PDFTools.ico"))
 
 # Set the window title
 window.title("PDF-Tools v1.2 (buc @ hems.de)")
@@ -132,7 +146,7 @@ window.title("PDF-Tools v1.2 (buc @ hems.de)")
 # Set the window size
 window.geometry("560x240")
 
-pimage = PhotoImage(file="./hla.png")
+pimage = PhotoImage(file=resource_path("hla.png"))
 
 label1 = Label(image=pimage)
 label1.image = pimage
