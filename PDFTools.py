@@ -10,11 +10,12 @@ def docx_to_pdf(docx_filename, pdf_filename):
 
     # Read the Word Document.
     try:
+        docx_filename = os.path.abspath(docx_filename)
         doc = word.Documents.Open(f'"{docx_filename}"')
     except comtypes.COMError as e:
-        messagebox.showerror(title = "Fehler", message = f'Kann {docx_filename} nicht finden.\nWord-Datei bereits geöffnet oder Leerzeichen im Namen?')
+        messagebox.showerror(title = "Fehler", message = f'Kann {docx_filename} nicht finden.\nWord-Datei bereits geöffnet?')
         word.Quit()
-        return
+        return 0
 
     # Write the pdf
     try:
@@ -23,23 +24,26 @@ def docx_to_pdf(docx_filename, pdf_filename):
         messagebox.showerror(title = "Fehler", message = f'{pdf_filename} existiert bereits.\nÜbersprungen...')
         doc.Close()
         word.Quit()
-        return
+        return 0
 
     # necessary to quit word instances after a correct run of the pdf generator
     doc.Close()
     word.Quit()
+    return 1
 
 def select_docx_files(convert_button):
+    #for message later
+    pdfcount = 0
 
     # Disable the button for unintentional clicks of certain users ;)
-    convert_button.config(state="disabled", text="Erzeuge PDFs...")
+    convert_button.config(state="disabled", text="...einen Moment bitte...")
     
     # close all instances of word to not create a mess...
-    messagebox.showwarning(title = "Bitte alle Word-Fenster schließen!", message = "Bitte schließen Sie alle Word-Fenster und klicken dann auf OK. Dies ist für einen sauberen Ablauf notwendig.\n\nHinweis:\nIm Extremfall schließen Sie Word-Instanzen per Taskmanager.")
+    messagebox.showwarning(title = "Bitte alle Word-Fenster schließen!", message = "Bitte schließen Sie alle Word-Fenster\nund klicken Sie dann auf OK.\nDies ist für einen sauberen Ablauf notwendig.")
 
     # Open a file selection dialog and get the selected files.
-    docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Konvertierung auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
-              
+    docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
+
     # Convert each Word document to a PDF.
     for docx_filename in docx_filenames:
         # Get the base and extension of the file.
@@ -49,39 +53,47 @@ def select_docx_files(convert_button):
         pdf_filename = base + '.pdf'
                  
         # Convert the Word document to a PDF.
-        docx_to_pdf(docx_filename, pdf_filename)
+        count = docx_to_pdf(docx_filename, pdf_filename)
+        pdfcount = pdfcount + count
+
+        #print(pdfcount)
+        convert_button.config(state="disabled", text="Erzeugte PDF: " + str(pdfcount)+".")
+        window.update()
     
-    show_temp_message('Erledigt', 'Die PDFs wurden erzeugt.')
+    if pdfcount > 0:
+        show_temp_message('Erledigt', 'Es wurden insgesamt ' + str(pdfcount) + ' PDFs erzeugt.')
     #enable the button again to create another batch of PDF files.
-    convert_button.config(state="active", text ="Word > PDF")
+    convert_button.config(state="active", text ="PDF aus DOCX erzeugen")
         
 def remove_metadata(meta_button):
+    pdfcount = 0
 
-    meta_button.config(state="disabled", text="Entferne Metadaten...")
+    meta_button.config(state="disabled", text="Entferne gerade Metadaten...")
 
     # Open the PDF files in read-binary mode
-    files = filedialog.askopenfilenames(title='PDFs zum Entfernen von Metadaten auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
+    files = filedialog.askopenfilenames(title='PDF auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
 
     # Loop through all selected PDFs
     for file in files:
         # Get the original file name and extension
         name, extension = os.path.splitext(file)
-        # Generate the new name for the original PDF
-        new_name = os.path.join(name + '_orig' + extension)
+        # Generate the temp name for the original PDF
+        temp_name = os.path.join(name + "_todo" + extension)
         # Rename the original PDF
         try:
-            os.rename(file, new_name)
+            os.rename(file, temp_name)
         except PermissionError:
             # If the file is in use, skip it and move on to the next file
             messagebox.showerror('Fehler', 'Die Datei "{}" wird von einem anderen Programm verwendet und wird daher übersprungen.'.format(file))
+            break
         except FileExistsError:
-            messagebox.showerror('Fehler', 'Die Datei "{}" gibt es bereits. Die Ursprungsdatei wurde daher nicht umbenannt. Vorgang abgebrochen.'.format(new_name))
-            continue
+            messagebox.showerror('Fehler', 'Die temporäre Datei "{}" gibt es bereits. Datei übersprungen. Bitte löschen Sie diese Datei.'.format(temp_name))
+            break
 
         # Open the PDF in read-binary mode
-        with open(new_name, 'rb') as file:
+        with open(temp_name, 'rb') as file:
             # Create a PDF object
-            pdf = PdfReader(new_name)
+            pdf = PdfReader(temp_name)
 
             # Create a PDF object to write the output to
             output_pdf = PdfWriter()
@@ -94,8 +106,8 @@ def remove_metadata(meta_button):
             {
                 "/Creator": "",
                 "/Producer": "",
-                "/Author": "",
-                "/Title": "",
+                "/Author": "Hessische Lehrkräfteakademie",
+                "/Title": "Landesabitur / Zentrale Abschlussprüfung Fachoberschule",
                 "/Subject": "",
                 "/Keywords": "",
                 "/CreationDate": "",
@@ -106,11 +118,16 @@ def remove_metadata(meta_button):
             output_file = name + extension
             with open(output_file, 'wb') as f:
                 output_pdf.write(f)
+                pdfcount+=1
+            
+        os.remove(temp_name)
+            
 
     # Reset button to original text
-    meta_button.config(state="active", text ="Metadaten aus PDF löschen")
+    meta_button.config(state="active", text ="Metadaten aus PDF entfernen")
 
-    show_temp_message('Erledigt', 'Die Metadaten der PDFs wurden gelöscht.\nDie Ursprungsdateien wurden in\n DATEINAME_orig.pdf umbenannt.')
+    if pdfcount >0:
+        show_temp_message('erledigt...', 'Die Metadaten der ' + str(pdfcount) + ' PDFs wurden entfernt.')
 
 def show_temp_message(title, message, seconds=5):
     # Create a new top-level window for the message.
@@ -141,7 +158,7 @@ window = Tk()
 window.iconbitmap(resource_path("PDFTools.ico"))
 
 # Set the window title
-window.title("PDF-Tools v1.2 (buc @ hems.de)")
+window.title("PDF-Tools v1.3 (buc @ hems.de)")
 
 # Set the window size
 window.geometry("560x240")
@@ -155,11 +172,11 @@ label1.image = pimage
 label1.place(x=0, y= 0)
 
 # Add a button to start cleaning the PDFs
-meta_button = Button(text="Metadaten aus PDF löschen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
+meta_button = Button(text="Metadaten aus PDFs entfernen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
 meta_button.pack(side=BOTTOM, pady=10)
 
 # Add a button to start converting the docx
-convert_button = Button(text ="Word => PDF", command=lambda: select_docx_files(convert_button), font=("Helvetica", 14))
+convert_button = Button(text ="PDFs aus DOCX erzeugen", command=lambda: select_docx_files(convert_button), font=("Helvetica", 14))
 convert_button.pack(side=BOTTOM)
 
 # Run the Tkinter event loop
