@@ -1,8 +1,11 @@
 import os
 import sys
+from tkinter import (BOTTOM, Button, Label, PhotoImage, Tk, Toplevel,
+                     filedialog, messagebox)
+
 import comtypes.client
-from tkinter import BOTTOM, Button, Label, Tk, Toplevel, filedialog, messagebox, PhotoImage
 from pypdf import PdfReader, PdfWriter
+
 
 def docx_to_pdf(docx_filename, pdf_filename):
     # Create a COM object for Word
@@ -12,6 +15,7 @@ def docx_to_pdf(docx_filename, pdf_filename):
     try:
         docx_filename = os.path.abspath(docx_filename)
         doc = word.Documents.Open(f'"{docx_filename}"')
+
     except comtypes.COMError as e:
         messagebox.showerror(title = "Fehler", message = f'Kann {docx_filename} nicht finden.\nWord-Datei bereits geöffnet?')
         word.Quit()
@@ -19,6 +23,7 @@ def docx_to_pdf(docx_filename, pdf_filename):
 
     # Write the pdf
     try:
+        pdf_filename = docx_filename = os.path.abspath(pdf_filename)
         doc.SaveAs(pdf_filename, FileFormat=17)
     except comtypes.COMError:
         messagebox.showerror(title = "Fehler", message = f'{pdf_filename} existiert bereits.\nÜbersprungen...')
@@ -51,7 +56,7 @@ def select_docx_files(convert_button):
 
         # Create the PDF filename.
         pdf_filename = base + '.pdf'
-                 
+
         # Convert the Word document to a PDF.
         count = docx_to_pdf(docx_filename, pdf_filename)
         pdfcount = pdfcount + count
@@ -106,8 +111,8 @@ def remove_metadata(meta_button):
             {
                 "/Creator": "",
                 "/Producer": "",
-                "/Author": "Hessische Lehrkräfteakademie",
-                "/Title": "Landesabitur / Zentrale Abschlussprüfung Fachoberschule",
+                "/Author": "",
+                "/Title": "",
                 "/Subject": "",
                 "/Keywords": "",
                 "/CreationDate": "",
@@ -124,10 +129,10 @@ def remove_metadata(meta_button):
             
 
     # Reset button to original text
-    meta_button.config(state="active", text ="Metadaten aus PDF entfernen")
+    meta_button.config(state="active", text = "Metadaten aus PDF entfernen")
 
     if pdfcount >0:
-        show_temp_message('erledigt...', 'Die Metadaten der ' + str(pdfcount) + ' PDFs wurden entfernt.')
+        show_temp_message("erledigt...", "Die Metadaten der " + str(pdfcount) + " PDFs wurden entfernt.")
 
 def show_temp_message(title, message, seconds=5):
     # Create a new top-level window for the message.
