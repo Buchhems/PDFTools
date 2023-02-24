@@ -1,5 +1,6 @@
 import os
 import sys
+import tqdm
 from tkinter import (BOTTOM, Button, Label, PhotoImage, Tk, Toplevel,
                      filedialog, messagebox)
 
@@ -17,16 +18,17 @@ def docx_to_pdf(docx_filename, pdf_filename):
         doc = word.Documents.Open(f'"{docx_filename}"')
 
     except comtypes.COMError as e:
-        messagebox.showerror(title = "Fehler", message = f'Kann {docx_filename} nicht finden.\nWord-Datei bereits geöffnet?')
+        messagebox.showerror(title = "Fehler", message = e)
         word.Quit()
         return 0
 
     # Write the pdf
     try:
-        pdf_filename = docx_filename = os.path.abspath(pdf_filename)
+        pdf_filename = os.path.abspath(pdf_filename)
         doc.SaveAs(pdf_filename, FileFormat=17)
-    except comtypes.COMError:
-        messagebox.showerror(title = "Fehler", message = f'{pdf_filename} existiert bereits.\nÜbersprungen...')
+      
+    except comtypes.COMError as e:
+        messagebox.showerror(title = "Fehler", message = e)
         doc.Close()
         word.Quit()
         return 0
