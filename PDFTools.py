@@ -1,6 +1,5 @@
 import os
 import sys
-import tqdm
 from tkinter import (BOTTOM, Button, Label, PhotoImage, Tk, Toplevel,
                      filedialog, messagebox)
 
