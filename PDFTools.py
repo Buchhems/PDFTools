@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import psutil
 from tkinter import (BOTTOM, Button, Label, PhotoImage, Tk, Toplevel,
                      filedialog, messagebox)
@@ -51,6 +52,7 @@ def select_docx_files(convert_button):
  
     # kill all word instances (user has been warned)
     killallword()
+    time.sleep(3)
 
     # Open a file selection dialog and get the selected files.
     docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
@@ -68,7 +70,7 @@ def select_docx_files(convert_button):
         pdfcount = pdfcount + count
 
         #print(pdfcount)
-        convert_button.config(state="disabled", text="Erzeugte PDF: " + str(pdfcount)+".")
+        convert_button.config(state="disabled", text="Erzeugte PDF: " + str(pdfcount))
         window.update()
     
     if pdfcount > 0:
@@ -172,7 +174,6 @@ def killallword():
             # Terminate the process
                 process = psutil.Process(process_info['pid'])
                 process.terminate()
-                #time.sleep(2)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
 
