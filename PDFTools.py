@@ -155,7 +155,7 @@ def remove_metadata(meta_button):
     revert_button_text()
 
     if pdfcount >0:
-        show_temp_message("erledigt...", "Die Metadaten von\n" + str(pdfcount) + " PDF wurden entfernt.")
+        show_temp_message("erledigt...", "Die Metadaten\nvon " + str(pdfcount) + " PDF\nwurden entfernt.")
 
 def show_temp_message(title, message, seconds=5):
     # Create a new top-level window for the message.
