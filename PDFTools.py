@@ -1,15 +1,14 @@
 import os
 import sys
 import time
+import tkinter
 import psutil
-from tkinter import (BOTTOM, Button, Label, PhotoImage, Tk, Toplevel,
-                     filedialog, messagebox)
-
+from tkinter import (messagebox, filedialog)
 import comtypes.client
 from pypdf import PdfReader, PdfWriter
 
 
-def docx_to_pdf(docx_filename, pdf_filename):
+def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
     # Create a COM object for Word
     word = comtypes.client.CreateObject('Word.Application')
 
@@ -19,9 +18,27 @@ def docx_to_pdf(docx_filename, pdf_filename):
         doc = word.Documents.Open(f'"{docx_filename}"')
 
     except comtypes.COMError as e:
-        messagebox.showerror(title = "Fehler", message = "Die Datei " + docx_filename + " kann nicht geöffnet werden.")
+        messagebox.showerror(title = "Fehler", message = "Die Datei " + docx_filename + " kann nicht geöffnet werden.\nPDF gerade geöffnet?")
         word.Quit()
         return 0
+
+    #lookup if RevisionMode should be disabled or not
+    if disable_track_changes_var.get():
+            # Iterate over all comments and delete them
+        for comment in doc.Comments:
+                #print(comment.Range.Text)
+                # Select the entire comment thread (including any replies) using the Range.Start and Range.End properties
+            range_start = comment.Scope.Start
+            range_end = comment.Scope.End
+            for reply in comment.Replies:
+                range_start = min(range_start, reply.Scope.Start)
+                range_end = max(range_end, reply.Scope.End)
+                # Delete the comment thread using the Range.Delete() method
+            doc.Range(range_start, range_end).Delete()
+            # Only Disable all TrackRevisions based on the user's choice
+            doc.TrackRevisions = False
+            # Accept all revisions
+            doc.AcceptAllRevisions()
 
     # Write the pdf
     try:
@@ -39,12 +56,12 @@ def docx_to_pdf(docx_filename, pdf_filename):
     word.Quit()
     return 1
 
-def select_docx_files(convert_button):
+def select_docx_files(convert_button, enable_track_changes_cb):
     #for message later
     pdfcount = 0
 
     # Disable the button for unintentional clicks of certain users ;)
-    convert_button.config(state="disabled", text="...einen Moment bitte...")
+    convert_button.config(state="disabled", text="... einen Moment bitte ...")
     
     # close all instances of word to not create a mess...
     messagebox.showwarning(title = "Word-Fenster schließen!", 
@@ -55,7 +72,7 @@ def select_docx_files(convert_button):
     time.sleep(3)
 
     # Open a file selection dialog and get the selected files.
-    docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
+    docx_filenames = tkinter.filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
 
     # Convert each Word document to a PDF.
     for docx_filename in docx_filenames:
@@ -66,12 +83,12 @@ def select_docx_files(convert_button):
         pdf_filename = base + '.pdf'
 
         # Convert the Word document to a PDF.
-        count = docx_to_pdf(docx_filename, pdf_filename)
+        count = docx_to_pdf(docx_filename, pdf_filename, enable_track_changes_cb)
         pdfcount = pdfcount + count
 
         #print(pdfcount)
         convert_button.config(state="disabled", text="Erzeugte PDF: " + str(pdfcount))
-        window.update()
+        root.update()
     
     if pdfcount > 0:
         show_temp_message('Erledigt', 'Es wurde(n)\n' + str(pdfcount) + ' PDF erzeugt.')
@@ -84,7 +101,7 @@ def remove_metadata(meta_button):
     meta_button.config(state="disabled", text="Entferne gerade Metadaten...")
 
     # Open the PDF files in read-binary mode
-    files = filedialog.askopenfilenames(title='PDF auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
+    files = tkinter.filedialog.askopenfilenames(title='PDF auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
 
     # Loop through all selected PDFs
     for file in files:
@@ -142,24 +159,36 @@ def remove_metadata(meta_button):
 
 def show_temp_message(title, message, seconds=5):
     # Create a new top-level window for the message.
-    window = Toplevel()
-    window.overrideredirect(True)
+    root = tkinter.Toplevel()
+    root.overrideredirect(True)
     #window.geometry("300x200")
-    window.title(title)
-   
+    root.title(title)
 
+    # get the screen width and height
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+
+    # calculate the x and y coordinates of the message box
+    x = (screen_width // 2) - 235
+    y = (screen_height // 2) - 95
+
+    # Create a new top-level window for the message.
+    
+    root.title(title)
+    root.geometry(f"+{x}+{y}")  
+   
     # Create a label for the message.
-    label = Label(window, text=message, font=("Helvetica", 50))
+    label = tkinter.Label(root, text=message, font=("Helvetica", 50))
     label.pack()
     
     # Close the window after a certain number of seconds.
-    window.after_idle(lambda: window.after(seconds * 1000, window.destroy))
+    root.after_idle(lambda: root.after(seconds * 1000, root.destroy))
 
 def revert_button_text():
     # Reset button to original text
     meta_button.config(state="active", text = "Metadaten aus PDF entfernen")
     #enable the button again to create another batch of PDF files.
-    convert_button.config(state="active", text ="PDF aus DOCX erzeugen")
+    convert_button.config(state="active", text ="PDF aus Docx erzeugen")
 
 def killallword():
     # Iterate over all running processes
@@ -189,30 +218,39 @@ def resource_path(relative_path):
 
 
 # Create the main window
-window = Tk()
-window.iconbitmap(resource_path("PDFTools.ico"))
+root = tkinter.Tk()
+root.iconbitmap(resource_path("PDFTools.ico"))
 
 # Set the window title
-window.title("PDF-Tools v1.4 (buc @ hems.de)")
+root.title("PDF-Tools v1.5 (buc @ hems.de)")
 
 # Set the window size
-window.geometry("560x240")
+#root.geometry("430x250")
+#make the window not resizeable
+root.resizable(0, 0)
 
-pimage = PhotoImage(file=resource_path("hla.png"))
-
-label1 = Label(image=pimage)
+#place image
+pimage = tkinter.PhotoImage(file=resource_path("hla.png"))
+label1 = tkinter.Label(image=pimage)
 label1.image = pimage
-
-#position image
-label1.place(x=0, y= 0)
-
-# Add a button to start cleaning the PDFs
-meta_button = Button(text="Metadaten aus PDF entfernen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
-meta_button.pack(side=BOTTOM, pady=10)
+label1.grid(row=0, column=0, sticky=tkinter.N,columnspan=2)
 
 # Add a button to start converting the docx
-convert_button = Button(text ="PDF aus DOCX erzeugen", command=lambda: select_docx_files(convert_button), font=("Helvetica", 14))
-convert_button.pack(side=BOTTOM)
+convert_button = tkinter.Button(root, text ="PDF aus Docx erzeugen", width = 20, command=lambda: select_docx_files(convert_button, enable_track_changes_var), font=("Helvetica", 14))
+convert_button.grid(row=1, column=1, padx=5, pady=5)
+
+# check if Revisionmode should be disabled and all changes accepted.
+enable_track_changes_var = tkinter.BooleanVar()
+enable_track_changes_cb = tkinter.Checkbutton(root, text="Evtl. Kommentare löschen,\nNachverfolgung beenden\nund Änderungen annehmen", variable=enable_track_changes_var)
+enable_track_changes_cb.grid(row=1, column=0, padx=5, pady=5)
+
+canvas = tkinter.Canvas(root, height=1)
+canvas.create_line(2, 2, 500, 2, dash=(4,2))
+canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+
+# Add a button to start cleaning the PDFs
+meta_button = tkinter.Button(root, text="Metadaten aus PDF entfernen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
+meta_button.grid(row=3, column=0, columnspan=2, padx=5, pady=10)
 
 # Run the Tkinter event loop
-window.mainloop()
+root.mainloop()
