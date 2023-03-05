@@ -3,10 +3,9 @@ import sys
 import time
 import tkinter
 import psutil
-from tkinter import (messagebox, filedialog)
+from tkinter import messagebox
 import comtypes.client
 from pypdf import PdfReader, PdfWriter
-
 
 def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
     # Create a COM object for Word
@@ -26,19 +25,13 @@ def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
     if disable_track_changes_var.get():
             # Iterate over all comments and delete them
         for comment in doc.Comments:
-                #print(comment.Range.Text)
-                # Select the entire comment thread (including any replies) using the Range.Start and Range.End properties
-            range_start = comment.Scope.Start
-            range_end = comment.Scope.End
-            for reply in comment.Replies:
-                range_start = min(range_start, reply.Scope.Start)
-                range_end = max(range_end, reply.Scope.End)
-                # Delete the comment thread using the Range.Delete() method
-            doc.Range(range_start, range_end).Delete()
-            # Only Disable all TrackRevisions based on the user's choice
-            doc.TrackRevisions = False
-            # Accept all revisions
-            doc.AcceptAllRevisions()
+            comment.Delete()
+            
+        # Only disable all TrackRevisions based on the user's choice
+        doc.TrackRevisions = False
+
+        # Accept all revisions
+        doc.AcceptAllRevisions()
 
     # Write the pdf
     try:
