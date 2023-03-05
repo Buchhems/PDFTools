@@ -32,6 +32,10 @@ def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
 
         # Accept all revisions
         doc.AcceptAllRevisions()
+    
+    #added because of concurrency problem. This makes python wait until the disabled revision is completed.
+    #not pretty but effective...
+    time.sleep(1)
 
     # Write the pdf
     try:
