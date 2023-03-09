@@ -2,9 +2,10 @@ import os
 import sys
 import time
 import psutil
-from tkinter import (BooleanVar, Button, Canvas, Checkbutton, Label, PhotoImage, Tk, Toplevel, messagebox, filedialog)
+from tkinter import (N, BooleanVar, Button, Canvas, Checkbutton, Label, PhotoImage, Tk, Toplevel, messagebox, filedialog)
 import comtypes.client
 from pypdf import PdfReader, PdfWriter
+import threading
 
 def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
     # Create a COM object for Word
@@ -22,20 +23,11 @@ def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
 
     #lookup if RevisionMode should be disabled or not
     if disable_track_changes_var.get():
-            # Iterate over all comments and delete them
-        for comment in doc.Comments:
-            comment.Delete()
-            
-        # Only disable all TrackRevisions based on the user's choice
-        doc.TrackRevisions = False
-
-        # Accept all revisions
-        doc.AcceptAllRevisions()
-    
-    #added because of concurrency problem. This makes python wait until the disabled revision is completed.
-    #not pretty but effective...
-    time.sleep(1)
-
+        # Create a thread to delete all comments before continuing.
+        comment_thread = threading.Thread(target=delete_comments(doc))
+        comment_thread.start()
+        comment_thread.join()
+     
     # Write the pdf
     try:
         pdf_filename = os.path.abspath(pdf_filename)
@@ -52,8 +44,19 @@ def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
     word.Quit()
     return 1
 
+def delete_comments(doc):
+    # Iterate over all comments and delete them
+    for comment in doc.Comments:
+        comment.Delete()
+        
+    # Only disable all TrackRevisions based on the user's choice
+    doc.TrackRevisions = False
+
+    # Accept all revisions
+    doc.AcceptAllRevisions()
+
 def select_docx_files(convert_button, enable_track_changes_cb):
-    #for message later
+    #for user info message later
     pdfcount = 0
 
     # Disable the button for unintentional clicks of certain users ;)
@@ -63,9 +66,13 @@ def select_docx_files(convert_button, enable_track_changes_cb):
     messagebox.showwarning(title = "Word-Fenster schließen!", 
                            message = "Schließen Sie alle Word-Fenster und klicken Sie dann auf OK.\n\nErläuterung:\nUm fehlerfrei PDF zu erzeugen, dürfen keine anderen Word Instanzen parallel laufen.")
  
-    # kill all word instances (user has been warned)
-    killallword()
-    time.sleep(3)
+    
+    # Create a thread to kill all word instances.
+    kill_thread = threading.Thread(target=kill_all_word)
+    # Start the thread.
+    kill_thread.start()
+    # Wait for the thread to finish.
+    kill_thread.join()
 
     # Open a file selection dialog and get the selected files.
     docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
@@ -113,7 +120,7 @@ def remove_metadata(meta_button):
             messagebox.showerror('Fehler', 'Die Datei "{}" wird von einem anderen Programm verwendet und wird daher übersprungen.'.format(file))
             continue
         except FileExistsError:
-            messagebox.showerror('Fehler', 'Die temporäre Datei "{}" gibt es bereits. Datei übersprungen. Bitte löschen Sie diese Datei.'.format(temp_name))
+            messagebox.showerror('Fehler', 'Die temporäre Datei "{}" gibt es bereits. Datei übersprungen.\n\nBitte löschen Sie diese Datei und starten das PDF Erzeugen neu.'.format(temp_name))
             continue
 
         # Open the PDF in read-binary mode
@@ -142,6 +149,7 @@ def remove_metadata(meta_button):
             )
             
             output_file = name + extension
+            
             with open(output_file, 'wb') as f:
                 output_pdf.write(f)
                 pdfcount+=1
@@ -186,7 +194,7 @@ def revert_button_text():
     #enable the button again to create another batch of PDF files.
     convert_button.config(state="active", text ="PDF aus Docx erzeugen")
 
-def killallword():
+def kill_all_word():
     # Iterate over all running processes
     for proc in psutil.process_iter():
         try:
@@ -229,7 +237,7 @@ root.resizable(0, 0)
 pimage = PhotoImage(file=resource_path("hla.png"))
 label1 = Label(image=pimage)
 label1.image = pimage
-label1.grid(row=0, column=0, sticky=tk.N,columnspan=2)
+label1.grid(row=0, column=0, sticky=N,columnspan=2)
 
 # Add a button to start converting the docx
 convert_button = Button(root, text ="PDF aus Docx erzeugen", width = 20, command=lambda: select_docx_files(convert_button, enable_track_changes_var), font=("Helvetica", 14))
