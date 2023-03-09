@@ -1,9 +1,8 @@
 import os
 import sys
 import time
-import tkinter
 import psutil
-from tkinter import messagebox
+from tkinter import (BooleanVar, Button, Canvas, Checkbutton, Label, PhotoImage, Tk, Toplevel, messagebox, filedialog)
 import comtypes.client
 from pypdf import PdfReader, PdfWriter
 
@@ -62,14 +61,14 @@ def select_docx_files(convert_button, enable_track_changes_cb):
     
     # close all instances of word to not create a mess...
     messagebox.showwarning(title = "Word-Fenster schließen!", 
-                           message = "Schließen Sie alle Word-Fenster\nund klicken Sie dann auf OK.")
+                           message = "Schließen Sie alle Word-Fenster und klicken Sie dann auf OK.\n\nErläuterung:\nUm fehlerfrei PDF zu erzeugen, dürfen keine anderen Word Instanzen parallel laufen.")
  
     # kill all word instances (user has been warned)
     killallword()
     time.sleep(3)
 
     # Open a file selection dialog and get the selected files.
-    docx_filenames = tkinter.filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
+    docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
 
     # Convert each Word document to a PDF.
     for docx_filename in docx_filenames:
@@ -98,7 +97,7 @@ def remove_metadata(meta_button):
     meta_button.config(state="disabled", text="Entferne gerade Metadaten...")
 
     # Open the PDF files in read-binary mode
-    files = tkinter.filedialog.askopenfilenames(title='PDF auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
+    files = filedialog.askopenfilenames(title='PDF auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
 
     # Loop through all selected PDFs
     for file in files:
@@ -112,10 +111,10 @@ def remove_metadata(meta_button):
         except PermissionError:
             # If the file is in use, skip it and move on to the next file
             messagebox.showerror('Fehler', 'Die Datei "{}" wird von einem anderen Programm verwendet und wird daher übersprungen.'.format(file))
-            break
+            continue
         except FileExistsError:
             messagebox.showerror('Fehler', 'Die temporäre Datei "{}" gibt es bereits. Datei übersprungen. Bitte löschen Sie diese Datei.'.format(temp_name))
-            break
+            continue
 
         # Open the PDF in read-binary mode
         with open(temp_name, 'rb') as file:
@@ -156,7 +155,7 @@ def remove_metadata(meta_button):
 
 def show_temp_message(title, message, seconds=5):
     # Create a new top-level window for the message.
-    root = tkinter.Toplevel()
+    root = Toplevel()
     root.overrideredirect(True)
     #window.geometry("300x200")
     root.title(title)
@@ -175,7 +174,7 @@ def show_temp_message(title, message, seconds=5):
     root.geometry(f"+{x}+{y}")  
    
     # Create a label for the message.
-    label = tkinter.Label(root, text=message, font=("Helvetica", 50))
+    label = Label(root, text=message, font=("Helvetica", 50))
     label.pack()
     
     # Close the window after a certain number of seconds.
@@ -215,7 +214,7 @@ def resource_path(relative_path):
 
 
 # Create the main window
-root = tkinter.Tk()
+root = Tk()
 root.iconbitmap(resource_path("PDFTools.ico"))
 
 # Set the window title
@@ -227,26 +226,26 @@ root.title("PDF-Tools v1.5 (buc @ hems.de)")
 root.resizable(0, 0)
 
 #place image
-pimage = tkinter.PhotoImage(file=resource_path("hla.png"))
-label1 = tkinter.Label(image=pimage)
+pimage = PhotoImage(file=resource_path("hla.png"))
+label1 = Label(image=pimage)
 label1.image = pimage
-label1.grid(row=0, column=0, sticky=tkinter.N,columnspan=2)
+label1.grid(row=0, column=0, sticky=tk.N,columnspan=2)
 
 # Add a button to start converting the docx
-convert_button = tkinter.Button(root, text ="PDF aus Docx erzeugen", width = 20, command=lambda: select_docx_files(convert_button, enable_track_changes_var), font=("Helvetica", 14))
+convert_button = Button(root, text ="PDF aus Docx erzeugen", width = 20, command=lambda: select_docx_files(convert_button, enable_track_changes_var), font=("Helvetica", 14))
 convert_button.grid(row=1, column=1, padx=5, pady=5)
 
 # check if Revisionmode should be disabled and all changes accepted.
-enable_track_changes_var = tkinter.BooleanVar()
-enable_track_changes_cb = tkinter.Checkbutton(root, text="Evtl. Kommentare löschen,\nNachverfolgung beenden\nund Änderungen annehmen", variable=enable_track_changes_var)
+enable_track_changes_var = BooleanVar()
+enable_track_changes_cb = Checkbutton(root, text="Evtl. Kommentare löschen,\nNachverfolgung beenden\nund Änderungen annehmen", variable=enable_track_changes_var)
 enable_track_changes_cb.grid(row=1, column=0, padx=5, pady=5)
 
-canvas = tkinter.Canvas(root, height=1)
+canvas = Canvas(root, height=1)
 canvas.create_line(2, 2, 500, 2, dash=(4,2))
 canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
 
 # Add a button to start cleaning the PDFs
-meta_button = tkinter.Button(root, text="Metadaten aus PDF entfernen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
+meta_button = Button(root, text="Metadaten aus PDF entfernen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
 meta_button.grid(row=3, column=0, columnspan=2, padx=5, pady=10)
 
 # Run the Tkinter event loop
