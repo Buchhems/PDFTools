@@ -2,7 +2,7 @@
 
 **PDF-Tools** ist ein praktisches Windows-Tool zur automatisierten Erstellung von PDF-Dateien aus Word-Dokumenten (.docx) sowie zur Entfernung sensibler Metadaten aus bestehenden PDF-Dateien.
 
-<img width="267" alt="Screenshot 2023-03-05 163200" src="https://user-images.githubusercontent.com/75378632/222970050-cfb7194c-1ebb-46a3-95fc-bf6127d8d1a4.png">
+<img width="417" height="516" alt="grafik" src="https://github.com/user-attachments/assets/e6075904-4bb6-41c6-9316-0abf04d79d7b" />
 
 Icon by Some icon firm (https://icon-icons.com/de/pack/Online-Learning/3480)
 
