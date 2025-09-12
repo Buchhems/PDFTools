@@ -39,9 +39,6 @@ Icon by Some icon firm (https://icon-icons.com/de/pack/Online-Learning/3480)
   - `pypdf`
   - `psutil`
   - `tkinter` (Standardmodul)
- 
-## Selbst kompilieren
-pyinstaller --onefile --windowed --add-data PDFTools.ico:. --add-data hla.png:. pdftools.py
 
 ## 📁 Dateistruktur
 
@@ -96,4 +93,4 @@ Die wichtigsten Dateien im Projekt:
 Zur Erstellung einer ausführbaren Datei:
 
 ```bash
-pyinstaller --onefile --windowed pdf_tools.py
+pyinstaller --onefile --windowed --add-data PDFTools.ico:. --add-data hla.png:. pdftools.py
