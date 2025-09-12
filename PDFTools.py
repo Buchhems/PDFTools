@@ -19,9 +19,6 @@ def resource_path(relative_path: str) -> str:
     return os.path.join(base_path, relative_path)
     
     
-def show_error(title: str, message: str):
-    messagebox.showerror(title, message)
-
 def docx_to_pdf(docx_path: str, pdf_path: str, disable_track_changes: bool) -> bool:
     word = comtypes.client.CreateObject('Word.Application')
     word.Visible = False
@@ -30,7 +27,7 @@ def docx_to_pdf(docx_path: str, pdf_path: str, disable_track_changes: bool) -> b
     try:
         doc = word.Documents.Open(os.path.abspath(docx_path))
     except comtypes.COMError as e:
-        show_error("Word öffnen fehlgeschlagen", f"{docx_path}\n{e}")
+        messagebox.showerror("Word öffnen fehlgeschlagen", f"{docx_path}\n{e}")
         word.Quit()
         return False
 
@@ -40,7 +37,7 @@ def docx_to_pdf(docx_path: str, pdf_path: str, disable_track_changes: bool) -> b
     try:
         doc.SaveAs(os.path.abspath(pdf_path), FileFormat=17)
     except comtypes.COMError as e:
-        show_error("PDF-Speicherung fehlgeschlagen", f"{pdf_path}\n{e}")
+        messagebox.showerror("PDF-Speicherung fehlgeschlagen", f"{pdf_path}\n{e}")
         doc.Close()
         word.Quit()
         return False
@@ -138,14 +135,14 @@ def pdf_edit(meta_button: Button, pdf_format_var: StringVar):
             with open(temp_clean, "wb") as f_out:
                 writer.write(f_out)
         except Exception as e:
-            showerror("Fehler", f"pypdf-Fehler bei {file}: {e}")
+            messagebox.showerror("Fehler", f"pypdf-Fehler bei {file}: {e}")
             os.rename(temp_name, file)
             continue
 
         # 2. if Blista: Ghostscript on temp_clean PDF
         if pdf_format_var.get() == "Blista":
             if shutil.which("gswin64c") is None:
-                show_error(
+                messagebox.showerror(
                     "Ghostscript nicht gefunden",
                     "Bitte installieren Sie Ghostscript oder fügen Sie es zum PATH hinzu."
                 )
@@ -168,7 +165,7 @@ def pdf_edit(meta_button: Button, pdf_format_var: StringVar):
             try:
                 subprocess.run(gs_cmd, check=True)
             except subprocess.CalledProcessError as e:
-                showerror("Fehler", f"Ghostscript-Fehler bei {file}: {e}")
+                messagebox.showerror("Fehler", f"Ghostscript-Fehler bei {file}: {e}")
                 os.rename(temp_name, file)
                 continue
         else:
