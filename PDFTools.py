@@ -1,48 +1,54 @@
 import os
 import sys
-import time
 import psutil
-from tkinter import (N, BooleanVar, Button, Canvas, Checkbutton, Label, PhotoImage, Tk, Toplevel, messagebox, filedialog)
-import comtypes.client
+from tkinter import (N, W, E, BooleanVar, Button, Canvas, Checkbutton, Label, PhotoImage, Tk, Toplevel, StringVar, OptionMenu, Frame, messagebox, filedialog, Menu)
 from pypdf import PdfReader, PdfWriter
 import threading
+import comtypes.client
+import subprocess
+import shutil
 
-def docx_to_pdf(docx_filename, pdf_filename, disable_track_changes_var):
-    # Create a COM object for Word
+def resource_path(relative_path: str) -> str:
+    #Get absolute path to resource, works for dev and for PyInstaller
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+
+    return os.path.join(base_path, relative_path)
+    
+    
+def show_error(title: str, message: str):
+    messagebox.showerror(title, message)
+
+def docx_to_pdf(docx_path: str, pdf_path: str, disable_track_changes: bool) -> bool:
     word = comtypes.client.CreateObject('Word.Application')
+    word.Visible = False
+    word.DisplayAlerts = False
 
-    # Read the Word Document.
     try:
-        docx_filename = os.path.abspath(docx_filename)
-        doc = word.Documents.Open(f'"{docx_filename}"')
-
+        doc = word.Documents.Open(os.path.abspath(docx_path))
     except comtypes.COMError as e:
-        messagebox.showerror(title = "Fehler", message = "Die Datei " + docx_filename + " kann nicht geöffnet werden.\nPDF gerade geöffnet?")
+        show_error("Word öffnen fehlgeschlagen", f"{docx_path}\n{e}")
         word.Quit()
-        return 0
+        return False
 
-    #lookup if RevisionMode should be disabled or not
-    if disable_track_changes_var.get():
-        # Create a thread to delete all comments before continuing.
-        comment_thread = threading.Thread(target=delete_comments(doc))
-        comment_thread.start()
-        comment_thread.join()
-     
-    # Write the pdf
+    if disable_track_changes:
+        delete_comments(doc)
+
     try:
-        pdf_filename = os.path.abspath(pdf_filename)
-        doc.SaveAs(pdf_filename, FileFormat=17)
-      
+        doc.SaveAs(os.path.abspath(pdf_path), FileFormat=17)
     except comtypes.COMError as e:
-        messagebox.showerror(title = "Fehler", message = "Die Datei " + pdf_filename + " kann nicht angelegt werden.")
+        show_error("PDF-Speicherung fehlgeschlagen", f"{pdf_path}\n{e}")
         doc.Close()
         word.Quit()
-        return 0
+        return False
 
-    # necessary to quit word instances after a correct run of the pdf generator
     doc.Close()
     word.Quit()
-    return 1
+    return True
+
 
 def delete_comments(doc):
     # Iterate over all comments and delete them
@@ -55,144 +61,162 @@ def delete_comments(doc):
     # Accept all revisions
     doc.AcceptAllRevisions()
 
-def select_docx_files(convert_button, enable_track_changes_cb):
-    #for user info message later
-    pdfcount = 0
+def select_docx_files(convert_btn: Button, disable_track_changes_var: BooleanVar):
+    pdf_count = 0
 
-    # Disable the button for unintentional clicks of certain users ;)
-    convert_button.config(state="disabled", text="... einen Moment bitte ...")
-    
-    # close all instances of word to not create a mess...
-    messagebox.showwarning(title = "Word-Fenster schließen!", 
-                           message = "Schließen Sie alle Word-Fenster und klicken Sie dann auf OK.\n\nErläuterung:\nUm fehlerfrei PDF zu erzeugen, dürfen keine anderen Word Instanzen parallel laufen.")
- 
-    
-    # Create a thread to kill all word instances.
-    kill_thread = threading.Thread(target=kill_all_word)
-    # Start the thread.
+    # set Button status
+    convert_btn.config(state="disabled", text="... einen Moment bitte ...", bg="lightgray", fg="black")
+    root.update()
+
+    # parallel word instances warning
+    messagebox.showwarning(
+        title="Word-Fenster schließen!",
+        message=(
+            "Schließen Sie alle Word-Fenster und klicken Sie dann auf OK.\n\n"
+            "Erläuterung:\nUm fehlerfrei PDF zu erzeugen, dürfen keine anderen Word Instanzen parallel laufen."
+        )
+    )
+
+    # thread to close all (former) word processes
+    kill_thread = threading.Thread(target=kill_all_word, daemon=True)
     kill_thread.start()
-    # Wait for the thread to finish.
-    kill_thread.join()
+    kill_thread.join()  # wait till all dead :)
 
-    # Open a file selection dialog and get the selected files.
-    docx_filenames = filedialog.askopenfilenames(title='Word-Dateien zur Erzeugung von PDF auswählen', filetypes=[('Word Dokumente', '*.docx')]) 
+    # choose files
+    docx_filenames = filedialog.askopenfilenames(
+        title='Word-Dateien zur Erzeugung von PDF auswählen',
+        filetypes=[('Word Dokumente', '*.docx')]
+    )
 
-    # Convert each Word document to a PDF.
-    for docx_filename in docx_filenames:
-        # Get the base and extension of the file.
-        base, ext = os.path.splitext(docx_filename)
+    # convertion
+    for docx_path in docx_filenames:
+        pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
+        success = docx_to_pdf(docx_path, pdf_path, disable_track_changes_var.get())
+        if success:
+            pdf_count += 1
 
-        # Create the PDF filename.
-        pdf_filename = base + '.pdf'
-
-        # Convert the Word document to a PDF.
-        count = docx_to_pdf(docx_filename, pdf_filename, enable_track_changes_cb)
-        pdfcount = pdfcount + count
-
-        #print(pdfcount)
-        convert_button.config(state="disabled", text="Erzeugte PDF: " + str(pdfcount))
+        convert_btn.config(text=f"Erzeugte PDF: {pdf_count}")
         root.update()
     
-    if pdfcount > 0:
-        show_temp_message('Erledigt', 'Es wurde(n)\n' + str(pdfcount) + ' PDF erzeugt.')
+    revert_button_text(convert_button, meta_button)  
     
-    revert_button_text()
+    if pdf_count:
+        messagebox.showinfo("Erledigt", f"{pdf_count} PDF wurden erstellt.")
+    
+    
         
-def remove_metadata(meta_button):
+def pdf_edit(meta_button: Button, pdf_format_var: StringVar):
     pdfcount = 0
+    meta_button.config(state="disabled", text="Bearbeite PDF...", bg="lightgray", fg="black")
 
-    meta_button.config(state="disabled", text="Entferne gerade Metadaten...")
+    files = filedialog.askopenfilenames(
+        title='PDF auswählen',
+        filetypes=[('PDF Dokumente', '*.pdf')]
+    )
 
-    # Open the PDF files in read-binary mode
-    files = filedialog.askopenfilenames(title='PDF auswählen', filetypes=[('PDF Dokumente', '*.pdf')])
-
-    # Loop through all selected PDFs
     for file in files:
-        # Get the original file name and extension
         name, extension = os.path.splitext(file)
-        # Generate the temp name for the original PDF
-        temp_name = os.path.join(name + "_todo" + extension)
-        # Rename the original PDF
+        temp_name = name + "_todo" + extension
+        temp_clean = name + "_clean" + extension
+
         try:
             os.rename(file, temp_name)
-        except PermissionError:
-            # If the file is in use, skip it and move on to the next file
-            messagebox.showerror('Fehler', 'Die Datei "{}" wird von einem anderen Programm verwendet und wird daher übersprungen.'.format(file))
-            continue
-        except FileExistsError:
-            messagebox.showerror('Fehler', 'Die temporäre Datei "{}" gibt es bereits. Datei übersprungen.\n\nBitte löschen Sie diese Datei und starten das PDF Erzeugen neu.'.format(temp_name))
+        except (PermissionError, FileExistsError) as e:
+            messagebox.showerror("Fehler", f"Datei {file} konnte nicht umbenannt werden: {e}")
             continue
 
-        # Open the PDF in read-binary mode
-        with open(temp_name, 'rb') as file:
-            # Create a PDF object
-            pdf = PdfReader(temp_name)
+        # 1. clean metadata with pypdf
+        try:
+            reader = PdfReader(temp_name)
+            writer = PdfWriter()
+            for page in reader.pages:
+                writer.add_page(page)
+            writer.add_metadata({})
+            if "/Metadata" in writer._root_object:
+                del writer._root_object["/Metadata"]
 
-            # Create a PDF object to write the output to
-            output_pdf = PdfWriter()
+            with open(temp_clean, "wb") as f_out:
+                writer.write(f_out)
+        except Exception as e:
+            showerror("Fehler", f"pypdf-Fehler bei {file}: {e}")
+            os.rename(temp_name, file)
+            continue
 
-            # Iterate through all pages in the PDF
-            for page in pdf.pages:
-                output_pdf.add_page(page)
-            
-            output_pdf.add_metadata(
-            {
-                "/Creator": "",
-                "/Producer": "",
-                "/Author": "",
-                "/Title": "",
-                "/Subject": "",
-                "/Keywords": "",
-                "/CreationDate": "",
-                "/ModDate": "",
-            }
-            )
-            
-            output_file = name + extension
-            
-            with open(output_file, 'wb') as f:
-                output_pdf.write(f)
-                pdfcount+=1
-            
+        # 2. if Blista: Ghostscript on temp_clean PDF
+        if pdf_format_var.get() == "Blista":
+            if shutil.which("gswin64c") is None:
+                show_error(
+                    "Ghostscript nicht gefunden",
+                    "Bitte installieren Sie Ghostscript oder fügen Sie es zum PATH hinzu."
+                )
+                os.rename(temp_name, file)
+                os.remove(temp_clean)
+                continue
+
+            gs_cmd = [
+                "gswin64c",
+                "-dPDFA=1",
+                "-dBATCH",
+                "-dNOPAUSE",
+                "-dNOOUTERSAVE",
+                "-sProcessColorModel=DeviceCMYK",
+                "-sDEVICE=pdfwrite",
+                "-dPDFACompatibilityPolicy=1",
+                f"-sOutputFile={file}",
+                temp_clean
+            ]
+            try:
+                subprocess.run(gs_cmd, check=True)
+            except subprocess.CalledProcessError as e:
+                showerror("Fehler", f"Ghostscript-Fehler bei {file}: {e}")
+                os.rename(temp_name, file)
+                continue
+        else:
+            # Nur säubern → temp_clean ins Ziel kopieren
+            shutil.move(temp_clean, file)
+
+        pdfcount += 1
         os.remove(temp_name)
-            
-    revert_button_text()
+        if os.path.exists(temp_clean):
+            os.remove(temp_clean)
 
-    if pdfcount >0:
-        show_temp_message("erledigt...", "Die Metadaten\nvon " + str(pdfcount) + " PDF\nwurden entfernt.")
-
-def show_temp_message(title, message, seconds=5):
-    # Create a new top-level window for the message.
-    root = Toplevel()
-    root.overrideredirect(True)
-    #window.geometry("300x200")
-    root.title(title)
-
-    # get the screen width and height
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-
-    # calculate the x and y coordinates of the message box
-    x = (screen_width // 2) - 235
-    y = (screen_height // 2) - 95
-
-    # Create a new top-level window for the message.
+    revert_button_text(convert_button, meta_button)  
     
-    root.title(title)
-    root.geometry(f"+{x}+{y}")  
-   
-    # Create a label for the message.
-    label = Label(root, text=message, font=("Helvetica", 50))
+    if pdfcount > 0:
+        messagebox.showinfo("Erledigt", f"{pdfcount} PDF wurden bearbeitet und gespeichert.")
+
+
+
+def show_temp_message(title: str, message: str, seconds: int = 5):
+    # Create a new top-level window for the message.
+    temp_window = Toplevel()
+    temp_window.overrideredirect(True)  # no topic for window
+    
+    #screen center
+    screen_width = temp_window.winfo_screenwidth()
+    screen_height = temp_window.winfo_screenheight()
+
+    # position of message
+    x = (screen_width // 2) - 150
+    y = (screen_height // 2) - 50
+
+    # set window size
+    temp_window.geometry(f"300x100+{x}+{y}")
+    temp_window.title(title)
+
+    # Label for message
+    label = Label(temp_window, text=message, font=("Helvetica", 12), pady=20)
     label.pack()
-    
-    # Close the window after a certain number of seconds.
-    root.after_idle(lambda: root.after(seconds * 1000, root.destroy))
 
-def revert_button_text():
+    # kill message after x seconds
+    temp_window.after(seconds * 1000, temp_window.destroy)
+
+
+def revert_button_text(convert_btn: Button, meta_btn: Button):
     # Reset button to original text
-    meta_button.config(state="active", text = "Metadaten aus PDF entfernen")
-    #enable the button again to create another batch of PDF files.
-    convert_button.config(state="active", text ="PDF aus Docx erzeugen")
+    meta_btn.config(state="active", text = "PDF bearbeiten", bg="#2196F3", fg="white")
+    # Enable the button again to create another batch of PDF files.
+    convert_btn.config(state="active", text="PDF aus Word erzeugen", bg="#4CAF50", fg="white")
 
 def kill_all_word():
     # Iterate over all running processes
@@ -210,51 +234,99 @@ def kill_all_word():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 pass
 
-def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
 
-    return os.path.join(base_path, relative_path)
-
+def show_info():
+    messagebox.showinfo(
+        "Über das Tool",
+        "PDF-Tools v2.0\n\n"
+        "Beschreibung: \n"
+        "- erstellt PDF aus Word-Dateien mittels COM-Schnittstelle\n"
+        "- entfernt Metadaten aus bestehenden PDF\n"
+        "- wandelt PDF ins Format PDF/A-1a mittels Ghostscript um (Blista)\n\n"
+        "Erstellt von Sebastian Buch\n"
+        "Kontakt: buc@hems.de"
+    )
 
 # Create the main window
 root = Tk()
+root.grid_columnconfigure(1, weight=1)
 root.iconbitmap(resource_path("PDFTools.ico"))
 
 # Set the window title
-root.title("PDF-Tools v1.5 (buc @ hems.de)")
+root.title("PDF-Tools v2.0")
 
-# Set the window size
-#root.geometry("430x250")
-#make the window not resizeable
+# Make the window not resizeable
 root.resizable(0, 0)
 
-#place image
+# Menu bar with Info
+menubar = Menu(root)
+root.config(menu=menubar)
+
+help_menu = Menu(menubar, tearoff=0)
+help_menu.add_command(label="Info", command=show_info)
+menubar.add_cascade(label="About", menu=help_menu)
+# -------------------------------
+
+# Place image
 pimage = PhotoImage(file=resource_path("hla.png"))
-label1 = Label(image=pimage)
+label1 = Label(root, image=pimage)
 label1.image = pimage
-label1.grid(row=0, column=0, sticky=N,columnspan=2)
+label1.grid(row=0, column=0, sticky=N, columnspan=2, pady=(0,10))
+
+# PDF Creation Frame
+create_frame = Frame(root, relief="ridge", bd=2, bg="#f8f8f8")
+create_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+create_frame.grid_columnconfigure(1, weight=1)
+
+# Frame title
+create_title = Label(create_frame, text="PDF aus Word erstellen", font=("Helvetica", 12, "bold"), bg="#f8f8f8")
+create_title.grid(row=0, column=0, columnspan=2, pady=(10,10))
+
+# Check if Revisionmode should be disabled and all changes accepted.
+disable_track_changes_var = BooleanVar()
+disable_track_changes_cb = Checkbutton(create_frame, text="Kommentare löschen,\nNachverfolgung beenden\nund Änderungen annehmen", 
+                                    variable=disable_track_changes_var, font=("Helvetica", 10), bg="#f8f8f8")
+disable_track_changes_cb.grid(row=1, column=0, columnspan=2, padx=10, pady=5)
+
+format_frame = Frame(create_frame, bg="#f8f8f8")
+format_frame.grid(row=2, column=0, columnspan=2, pady=5)
 
 # Add a button to start converting the docx
-convert_button = Button(root, text ="PDF aus Docx erzeugen", width = 20, command=lambda: select_docx_files(convert_button, enable_track_changes_var), font=("Helvetica", 14))
-convert_button.grid(row=1, column=1, padx=5, pady=5)
+convert_button = Button(create_frame, text="PDF aus Word erzeugen", width=25, 
+                       command=lambda: select_docx_files(convert_button, disable_track_changes_var), 
+                       font=("Helvetica", 12), bg="#4CAF50", fg="white", relief="raised", bd=2)
+convert_button.grid(row=3, column=0, columnspan=2, padx=10, pady=(0,15))
 
-# check if Revisionmode should be disabled and all changes accepted.
-enable_track_changes_var = BooleanVar()
-enable_track_changes_cb = Checkbutton(root, text="Evtl. Kommentare löschen,\nNachverfolgung beenden\nund Änderungen annehmen", variable=enable_track_changes_var)
-enable_track_changes_cb.grid(row=1, column=0, padx=5, pady=5)
+# Separator
+separator_frame = Frame(root, height=20)
+separator_frame.grid(row=2, column=0, columnspan=2, pady=15)
+canvas = Canvas(separator_frame, height=2, bg="white", highlightthickness=0)
+canvas.pack(fill="x", padx=20)
+canvas.create_line(0, 1, 400, 1, fill="#cccccc", width=2) 
 
-canvas = Canvas(root, height=1)
-canvas.create_line(2, 2, 500, 2, dash=(4,2))
-canvas.grid(row=2, column=0, columnspan=2, padx=5, pady=5)
+# PDF Processing Frame
+process_frame = Frame(root, relief="ridge", bd=2, bg="#f8f8f8")
+process_frame.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
+process_frame.grid_columnconfigure(1, weight=1)
 
-# Add a button to start cleaning the PDFs
-meta_button = Button(root, text="Metadaten aus PDF entfernen", command=lambda: remove_metadata(meta_button), font=("Helvetica", 14))
-meta_button.grid(row=3, column=0, columnspan=2, padx=5, pady=10)
+# Frame title
+process_title = Label(process_frame, text="PDF bearbeiten", font=("Helvetica", 12, "bold"), bg="#f8f8f8")
+process_title.grid(row=0, column=0, columnspan=2, pady=(10,5))
+
+pdf_mode_frame = Frame(process_frame, bg="#f8f8f8")
+pdf_format_var = StringVar(value="Nur säubern")
+pdf_format_label = Label(pdf_mode_frame, text="PDF‑Modus:", font=("Helvetica", 11), bg="#f8f8f8")
+pdf_format_label.pack(side="left", padx=(0,5))
+
+pdf_format_menu = OptionMenu(pdf_mode_frame, pdf_format_var, "Nur säubern", "Blista")
+pdf_format_menu.config(font=("Helvetica", 11), width=10, bg="white")
+pdf_format_menu.pack(side="left")
+pdf_mode_frame.grid(row=1, column=0, columnspan=2, pady=(0,10))
+
+meta_button = Button(process_frame, text="PDF bearbeiten", width=25,
+                    command=lambda: pdf_edit(meta_button, pdf_format_var),
+                    font=("Helvetica", 12), bg="#2196F3", fg="white", relief="raised", bd=2)
+meta_button.grid(row=2, column=0, columnspan=2, padx=10, pady=(0,15))
 
 # Run the Tkinter event loop
 root.mainloop()
