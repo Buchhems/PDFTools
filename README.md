@@ -11,7 +11,7 @@ Icon by Some icon firm (https://icon-icons.com/de/pack/Online-Learning/3480)
 ## 🚀 Funktionen
 
 - 📄 Konvertiert `.docx`-Dateien in `.pdf` mit Microsoft Word
-- 🧹 Entfernt Metadaten wie Autor, Titel, Erstellungsdatum aus PDFs
+- 🧹 Entfernt Metadaten wie Autor, Titel, Erstellungsdatum aus PDFs, erstellt PDF/A-1a kompatible PDF (Blista-Modus)
 - 🗑️ Optional: Kommentare löschen und Änderungsverfolgung beenden
 - 🖥️ Benutzerfreundliche Oberfläche mit Tkinter
 - 🧠 Automatische Erkennung und Beendigung laufender Word-Instanzen
@@ -39,6 +39,9 @@ Icon by Some icon firm (https://icon-icons.com/de/pack/Online-Learning/3480)
   - `pypdf`
   - `psutil`
   - `tkinter` (Standardmodul)
+ 
+## Selbst kompilieren
+pyinstaller --onefile --windowed --add-data PDFTools.ico:. --add-data hla.png:. pdftools.py
 
 ## 📁 Dateistruktur
 
