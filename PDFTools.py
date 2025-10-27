@@ -8,6 +8,35 @@ import comtypes.client
 import subprocess
 import shutil
 
+
+class ToolTip:
+    """Create Tooltip for a widget"""
+    def __init__(self, widget, text='Widget Info'):
+        self.widget = widget
+        self.text = text
+        self.widget.bind("<Enter>", self.enter)
+        self.widget.bind("<Leave>", self.leave)
+        self.tooltip_window = None
+
+    def enter(self, event=None):
+        x = self.widget.winfo_rootx() + 25
+        y = self.widget.winfo_rooty() + 25
+
+        self.tooltip_window = tw = Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry("+%d+%d" % (x, y))
+
+        label = Label(tw, text=self.text, justify='left',
+                     background="#FFFFE0", relief='solid', borderwidth=1,
+                     font=("Segoe UI", "8", "normal"))
+        label.pack(ipadx=1)
+
+    def leave(self, event=None):
+        if self.tooltip_window:
+            self.tooltip_window.destroy()
+            self.tooltip_window = None
+
+
 def resource_path(relative_path: str) -> str:
     #Get absolute path to resource, works for dev and for PyInstaller
     try:
@@ -58,11 +87,11 @@ def delete_comments(doc):
     # Accept all revisions
     doc.AcceptAllRevisions()
 
-def select_docx_files(convert_btn: Button, disable_track_changes_var: BooleanVar):
+def select_docx_files(convert_btn, meta_btn, disable_track_changes_var):
     pdf_count = 0
 
     # set Button status
-    convert_btn.config(state="disabled", text="... einen Moment bitte ...", bg="lightgray", fg="black")
+    convert_btn.config(state="disabled", text="... einen Moment bitte ...", bg="#E5E7EB", fg="black")
     root.update()
 
     # parallel word instances warning
@@ -85,7 +114,7 @@ def select_docx_files(convert_btn: Button, disable_track_changes_var: BooleanVar
         filetypes=[('Word Dokumente', '*.docx')]
     )
 
-    # convertion
+    # conversion
     for docx_path in docx_filenames:
         pdf_path = os.path.splitext(docx_path)[0] + ".pdf"
         success = docx_to_pdf(docx_path, pdf_path, disable_track_changes_var.get())
@@ -102,9 +131,9 @@ def select_docx_files(convert_btn: Button, disable_track_changes_var: BooleanVar
     
     
         
-def pdf_edit(meta_button: Button, pdf_format_var: StringVar):
+def pdf_edit(meta_btn, pdf_format_var):
     pdfcount = 0
-    meta_button.config(state="disabled", text="Bearbeite PDF...", bg="lightgray", fg="black")
+    meta_button.config(state="disabled", text="Bearbeite PDF...", bg="#E5E7EB", fg="black")
 
     files = filedialog.askopenfilenames(
         title='PDF auswählen',
@@ -211,9 +240,9 @@ def show_temp_message(title: str, message: str, seconds: int = 5):
 
 def revert_button_text(convert_btn: Button, meta_btn: Button):
     # Reset button to original text
-    meta_btn.config(state="active", text = "PDF bearbeiten", bg="#2196F3", fg="white")
+    meta_btn.config(state="active", text = "PDF bearbeiten", bg="#1E40AF", fg="white")
     # Enable the button again to create another batch of PDF files.
-    convert_btn.config(state="active", text="PDF aus Word erzeugen", bg="#4CAF50", fg="white")
+    convert_btn.config(state="active", text="PDF aus Word erzeugen", bg="#2563EB", fg="white")
 
 def kill_all_word():
     # Iterate over all running processes
@@ -235,7 +264,7 @@ def kill_all_word():
 def show_info():
     messagebox.showinfo(
         "Über das Tool",
-        "PDF-Tools v2.0\n\n"
+        "PDF-Tools v2.1\n\n"
         "Beschreibung: \n"
         "- erstellt PDF aus Word-Dateien mittels COM-Schnittstelle\n"
         "- entfernt Metadaten aus bestehenden PDF\n"
@@ -271,27 +300,27 @@ label1.image = pimage
 label1.grid(row=0, column=0, sticky=N, columnspan=2, pady=(0,10))
 
 # PDF Creation Frame
-create_frame = Frame(root, relief="ridge", bd=2, bg="#f8f8f8")
+create_frame = Frame(root, relief="ridge", bd=2, bg="#FFFFFF")
 create_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 create_frame.grid_columnconfigure(1, weight=1)
 
 # Frame title
-create_title = Label(create_frame, text="PDF aus Word erstellen", font=("Helvetica", 12, "bold"), bg="#f8f8f8")
+create_title = Label(create_frame, text="PDF aus Word erstellen", font=("Helvetica", 12, "bold"), bg="#FFFFFF")
 create_title.grid(row=0, column=0, columnspan=2, pady=(10,10))
 
 # Check if Revisionmode should be disabled and all changes accepted.
 disable_track_changes_var = BooleanVar()
 disable_track_changes_cb = Checkbutton(create_frame, text="Kommentare löschen,\nNachverfolgung beenden\nund Änderungen annehmen", 
-                                    variable=disable_track_changes_var, font=("Helvetica", 10), bg="#f8f8f8")
+                                    variable=disable_track_changes_var, font=("Helvetica", 10), bg="#FFFFFF")
 disable_track_changes_cb.grid(row=1, column=0, columnspan=2, padx=10, pady=5)
 
-format_frame = Frame(create_frame, bg="#f8f8f8")
+format_frame = Frame(create_frame, bg="#FFFFFF")
 format_frame.grid(row=2, column=0, columnspan=2, pady=5)
 
 # Add a button to start converting the docx
 convert_button = Button(create_frame, text="PDF aus Word erzeugen", width=25, 
-                       command=lambda: select_docx_files(convert_button, disable_track_changes_var), 
-                       font=("Helvetica", 12), bg="#4CAF50", fg="white", relief="raised", bd=2)
+                       command=lambda: select_docx_files(convert_button, meta_button, disable_track_changes_var), 
+                       font=("Helvetica", 12), bg="#2563EB", fg="white", relief="raised", bd=2)
 convert_button.grid(row=3, column=0, columnspan=2, padx=10, pady=(0,15))
 
 # Separator
@@ -302,17 +331,17 @@ canvas.pack(fill="x", padx=20)
 canvas.create_line(0, 1, 400, 1, fill="#cccccc", width=2) 
 
 # PDF Processing Frame
-process_frame = Frame(root, relief="ridge", bd=2, bg="#f8f8f8")
+process_frame = Frame(root, relief="ridge", bd=2, bg="#FFFFFF")
 process_frame.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 process_frame.grid_columnconfigure(1, weight=1)
 
 # Frame title
-process_title = Label(process_frame, text="PDF bearbeiten", font=("Helvetica", 12, "bold"), bg="#f8f8f8")
+process_title = Label(process_frame, text="PDF bearbeiten", font=("Helvetica", 12, "bold"), bg="#FFFFFF")
 process_title.grid(row=0, column=0, columnspan=2, pady=(10,5))
 
-pdf_mode_frame = Frame(process_frame, bg="#f8f8f8")
+pdf_mode_frame = Frame(process_frame, bg="#FFFFFF")
 pdf_format_var = StringVar(value="Nur säubern")
-pdf_format_label = Label(pdf_mode_frame, text="PDF‑Modus:", font=("Helvetica", 11), bg="#f8f8f8")
+pdf_format_label = Label(pdf_mode_frame, text="PDF‑Modus:", font=("Helvetica", 11), bg="#FFFFFF")
 pdf_format_label.pack(side="left", padx=(0,5))
 
 pdf_format_menu = OptionMenu(pdf_mode_frame, pdf_format_var, "Nur säubern", "Blista")
@@ -322,7 +351,7 @@ pdf_mode_frame.grid(row=1, column=0, columnspan=2, pady=(0,10))
 
 meta_button = Button(process_frame, text="PDF bearbeiten", width=25,
                     command=lambda: pdf_edit(meta_button, pdf_format_var),
-                    font=("Helvetica", 12), bg="#2196F3", fg="white", relief="raised", bd=2)
+                    font=("Helvetica", 12), bg="#1E40AF", fg="white", relief="raised", bd=2)
 meta_button.grid(row=2, column=0, columnspan=2, padx=10, pady=(0,15))
 
 # Run the Tkinter event loop
