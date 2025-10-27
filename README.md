@@ -1,8 +1,7 @@
 # 🛠️ PDF-Tools – PDF aus Word erzeugen & Metadaten entfernen
 
 **PDF-Tools** ist ein praktisches Windows-Tool zur automatisierten Erstellung von PDF-Dateien aus Word-Dokumenten (.docx) sowie zur Entfernung sensibler Metadaten aus bestehenden PDF-Dateien.
-
-<img width="417" height="516" alt="grafik" src="https://github.com/user-attachments/assets/e6075904-4bb6-41c6-9316-0abf04d79d7b" />
+<img width="420" height="518" alt="grafik" src="https://github.com/user-attachments/assets/15a86204-c236-46f2-8f96-6c7020267e46" />
 
 Icon by Some icon firm (https://icon-icons.com/de/pack/Online-Learning/3480)
 
