@@ -279,7 +279,7 @@ root.grid_columnconfigure(1, weight=1)
 root.iconbitmap(resource_path("PDFTools.ico"))
 
 # Set the window title
-root.title("PDF-Tools v2.0")
+root.title("PDF-Tools v2.1")
 
 # Make the window not resizeable
 root.resizable(0, 0)
