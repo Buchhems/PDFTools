@@ -51,29 +51,60 @@ def resource_path(relative_path: str) -> str:
 def docx_to_pdf(docx_path: str, pdf_path: str, disable_track_changes: bool) -> bool:
     word = comtypes.client.CreateObject('Word.Application')
     word.Visible = False
-    word.DisplayAlerts = False
+    word.DisplayAlerts = False 
 
     try:
-        doc = word.Documents.Open(os.path.abspath(docx_path))
+        # ReadOnly=True prohibits locking the original document
+        doc = word.Documents.Open(os.path.abspath(docx_path), ReadOnly=True)
+        
+        # activating the window should help word with rendering the pictures correctly
+        doc.Activate() 
     except comtypes.COMError as e:
         messagebox.showerror("Word öffnen fehlgeschlagen", f"{docx_path}\n{e}")
-        word.Quit()
+        try:
+            word.Quit()
+        except:
+            pass
         return False
 
     if disable_track_changes:
-        delete_comments(doc)
+        try:
+            delete_comments(doc)
+        except Exception as e:
+            print(f"Warnung beim Bereinigen: {e}")
 
     try:
-        doc.SaveAs(os.path.abspath(pdf_path), FileFormat=17)
+        # FIX: ExportAsFixedFormat instead of SaveAs
+        # - helps with locking issues
+        # - fixes bad pictures
+        doc.ExportAsFixedFormat(
+            OutputFileName=os.path.abspath(pdf_path),
+            ExportFormat=17,              # wdExportFormatPDF
+            OpenAfterExport=False,
+            OptimizeFor=0,                # 0 = print quality
+            Item=0,                       
+            IncludeDocProps=True,
+            CreateBookmarks=1,            # Bookmarks from headlines
+            DocStructureTags=True,        # Tags for inclusion
+            BitmapMissingFonts=True,
+            UseISO19005_1=True            # tries to aline with PDF/A-Standard
+        )
     except comtypes.COMError as e:
-        messagebox.showerror("PDF-Speicherung fehlgeschlagen", f"{pdf_path}\n{e}")
-        doc.Close()
+        # check if PDF is still opened
+        messagebox.showerror("PDF-Speicherung fehlgeschlagen", 
+                             f"Fehler beim Speichern von:\n{pdf_path}\n\n"
+                             f"Mögliche Ursachen:\n"
+                             f"- Die PDF ist noch in Acrobat/Edge geöffnet.\n\n"
+                             f"Word Fehlercode:\n {e}")
+        doc.Close(SaveChanges=0) # 0 = wdDoNotSaveChanges
         word.Quit()
         return False
 
-    doc.Close()
+    # important: This keeps all changes so that comments are still there in case opening fails...
+    doc.Close(SaveChanges=0)
     word.Quit()
     return True
+
 
 
 def delete_comments(doc):
@@ -121,97 +152,159 @@ def select_docx_files(convert_btn, meta_btn, disable_track_changes_var):
         if success:
             pdf_count += 1
 
-        convert_btn.config(text=f"Erzeugte PDF: {pdf_count}")
+        convert_btn.config(text=f"Anzahl erzeugte PDF: {pdf_count}")
         root.update()
     
     revert_button_text(convert_button, meta_button)  
     
     if pdf_count:
         messagebox.showinfo("Erledigt", f"{pdf_count} PDF wurden erstellt.")
+
+def create_pdfa_def(icc_path: str, def_filename: str) -> str:
+    """Erstellt die PostScript-Definitionsdatei für Ghostscript PDF/A-1 Konvertierung."""
+    # Ghostscript benötigt Forward Slashes, auch unter Windows
+    icc_path_gs = icc_path.replace("\\", "/")
     
+    ps_content = f"""%!PS-Adobe-3.0
+% PDF/A-1 Definitionsdatei für Ghostscript
+/ICCProfile ({icc_path_gs}) def
+/OutputConditionIdentifier (sRGB) def
+/OutputCondition (sRGB IEC61966-2.1) def
+/RegistryName (http://www.color.org) def
+"""
     
+    with open(def_filename, 'w', encoding='utf-8') as f:
+        f.write(ps_content)
+    
+    return os.path.abspath(def_filename)
+
+
+
         
 def pdf_edit(meta_btn, pdf_format_var):
     pdfcount = 0
     meta_button.config(state="disabled", text="Bearbeite PDF...", bg="#E5E7EB", fg="black")
+    root.update()
 
+    # 1. PDF-Dateien auswählen
     files = filedialog.askopenfilenames(
-        title='PDF auswählen',
+        title='PDF-Dateien auswählen, die bearbeitet werden sollen', 
         filetypes=[('PDF Dokumente', '*.pdf')]
     )
+    
+    if not files:
+        revert_button_text(convert_button, meta_button)
+        return
 
+    # 2. Setup für Blista (PDF/A) Modus
+    pdfa_def_path = ""
+    icc_profile_path = ""
+
+    if pdf_format_var.get() == "Blista":
+        # Check Ghostscript
+        if shutil.which("gswin64c") is None:
+            messagebox.showerror("Fehler", "Ghostscript (gswin64c) wurde nicht im Pfad gefunden!")
+            revert_button_text(convert_button, meta_button)
+            return
+
+        # Benutzer nach ICC-Profil fragen
+        messagebox.showinfo("ICC-Profil benötigt", 
+            "Für die PDF/A-1 Konvertierung (Blista) wird ein ICC-Farbprofil benötigt.\n"
+            "Bitte wählen Sie im nächsten Fenster eine .icc Datei aus (z.B. sRGB Color Space Profile.icm).")
+        
+        icc_profile_path = filedialog.askopenfilename(
+            title='ICC-Farbprofil auswählen', 
+            filetypes=[('ICC Profile', '*.icc *.icm')]
+        )
+
+        if not icc_profile_path:
+            messagebox.showwarning("Abbruch", "Ohne ICC-Profil kann kein valides PDF/A-1 erstellt werden.")
+            revert_button_text(convert_button, meta_button)
+            return
+
+        # Definitionsdatei erstellen
+        try:
+            pdfa_def_path = create_pdfa_def(icc_profile_path, "PDFA_def.ps")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Konnte Definitionsdatei nicht erstellen:\n{e}")
+            revert_button_text(convert_button, meta_button)
+            return
+
+    # 3. Dateien verarbeiten
     for file in files:
         name, extension = os.path.splitext(file)
-        temp_name = name + "_todo" + extension
-        temp_clean = name + "_clean" + extension
+        temp_source = name + "_source" + extension
 
+        # Umbenennen (Source sichern)
         try:
-            os.rename(file, temp_name)
+            os.rename(file, temp_source)
         except (PermissionError, FileExistsError) as e:
-            messagebox.showerror("Fehler", f"Datei {file} konnte nicht umbenannt werden: {e}")
+            messagebox.showerror("Fehler", f"Zugriffsfehler bei {file}:\n{e}")
             continue
 
-        # 1. clean metadata with pypdf
         try:
-            reader = PdfReader(temp_name)
-            writer = PdfWriter()
-            for page in reader.pages:
-                writer.add_page(page)
-            writer.add_metadata({})
-            if "/Metadata" in writer._root_object:
-                del writer._root_object["/Metadata"]
+            if pdf_format_var.get() == "Blista":
+                # Ghostscript Kommando
+                gs_cmd = [
+                    "gswin64c",
+                    "-dPDFA=1",                      # PDF/A-1 Flag
+                    "-dBATCH", "-dNOPAUSE", "-dNOOUTERSAVE",
+                    "-sDEVICE=pdfwrite",
+                    "-sProcessColorModel=DeviceRGB", # RGB für Word-Grafiken
+                    "-dPDFACompatibilityPolicy=1",   # Fallback bei Fehlern
+                    f"-sOutputFile={file}",
+                    pdfa_def_path,                   
+                    temp_source
+                ]
+                
+                # Ausführen (Fehler abfangen)
+                process = subprocess.run(gs_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                if process.returncode != 0:
+                    # Fehler dekodieren
+                    err_msg = process.stderr.decode('cp1252', errors='ignore')
+                    raise subprocess.CalledProcessError(process.returncode, gs_cmd, stderr=process.stderr)
+            else:
+                # "Nur säubern" Logik
+                reader = PdfReader(temp_source)
+                writer = PdfWriter()
+                for page in reader.pages:
+                    writer.add_page(page)
+                writer.add_metadata({})
+                if "/Metadata" in writer._root_object:
+                    del writer._root_object["/Metadata"]
+                
+                with open(file, "wb") as f_out:
+                    writer.write(f_out)
 
-            with open(temp_clean, "wb") as f_out:
-                writer.write(f_out)
+            pdfcount += 1
+            os.remove(temp_source) # Temp nur bei Erfolg löschen
+
+        except subprocess.CalledProcessError as e:
+            # Ghostscript spezifische Fehlermeldung
+            err_msg = e.stderr.decode('cp1252', errors='ignore')
+            messagebox.showerror("Konvertierungsfehler", 
+                f"Ghostscript konnte {os.path.basename(file)} nicht konvertieren.\n\n"
+                f"Fehler:\n{err_msg}\n\n"
+                "Die Datei wird zurückgesetzt.")
+            if os.path.exists(temp_source):
+                if os.path.exists(file): os.remove(file)
+                os.rename(temp_source, file)
+                
         except Exception as e:
-            messagebox.showerror("Fehler", f"pypdf-Fehler bei {file}: {e}")
-            os.rename(temp_name, file)
-            continue
+            # Allgemeine Fehler
+            messagebox.showerror("Fehler", f"Fehler bei {file}:\n{e}")
+            if os.path.exists(temp_source):
+                if os.path.exists(file): os.remove(file)
+                os.rename(temp_source, file)
 
-        # 2. if Blista: Ghostscript on temp_clean PDF
-        if pdf_format_var.get() == "Blista":
-            if shutil.which("gswin64c") is None:
-                messagebox.showerror(
-                    "Ghostscript nicht gefunden",
-                    "Bitte installieren Sie Ghostscript oder fügen Sie es zum PATH hinzu."
-                )
-                os.rename(temp_name, file)
-                os.remove(temp_clean)
-                continue
+    # Aufräumen: Definitionsdatei löschen
+    if pdfa_def_path and os.path.exists(pdfa_def_path):
+        os.remove(pdfa_def_path)
 
-            gs_cmd = [
-                "gswin64c",
-                "-dPDFA=1",
-                "-dBATCH",
-                "-dNOPAUSE",
-                "-dNOOUTERSAVE",
-                "-sProcessColorModel=DeviceCMYK",
-                "-sDEVICE=pdfwrite",
-                "-dPDFACompatibilityPolicy=1",
-                f"-sOutputFile={file}",
-                temp_clean
-            ]
-            try:
-                subprocess.run(gs_cmd, check=True)
-            except subprocess.CalledProcessError as e:
-                messagebox.showerror("Fehler", f"Ghostscript-Fehler bei {file}: {e}")
-                os.rename(temp_name, file)
-                continue
-        else:
-            # Nur säubern → temp_clean ins Ziel kopieren
-            shutil.move(temp_clean, file)
-
-        pdfcount += 1
-        os.remove(temp_name)
-        if os.path.exists(temp_clean):
-            os.remove(temp_clean)
-
-    revert_button_text(convert_button, meta_button)  
+    revert_button_text(convert_button, meta_button)
     
     if pdfcount > 0:
-        messagebox.showinfo("Erledigt", f"{pdfcount} PDF wurden bearbeitet und gespeichert.")
-
-
+        messagebox.showinfo("Erledigt", f"{pdfcount} PDF wurden bearbeitet.")
 
 def show_temp_message(title: str, message: str, seconds: int = 5):
     # Create a new top-level window for the message.
@@ -264,7 +357,7 @@ def kill_all_word():
 def show_info():
     messagebox.showinfo(
         "Über das Tool",
-        "PDF-Tools v2.1\n\n"
+        "PDF-Tools v2.2\n\n"
         "Beschreibung: \n"
         "- erstellt PDF aus Word-Dateien mittels COM-Schnittstelle\n"
         "- entfernt Metadaten aus bestehenden PDF\n"
@@ -279,7 +372,7 @@ root.grid_columnconfigure(1, weight=1)
 root.iconbitmap(resource_path("PDFTools.ico"))
 
 # Set the window title
-root.title("PDF-Tools v2.1")
+root.title("PDF-Tools v2.2")
 
 # Make the window not resizeable
 root.resizable(0, 0)
@@ -340,12 +433,12 @@ process_title = Label(process_frame, text="PDF bearbeiten", font=("Helvetica", 1
 process_title.grid(row=0, column=0, columnspan=2, pady=(10,5))
 
 pdf_mode_frame = Frame(process_frame, bg="#FFFFFF")
-pdf_format_var = StringVar(value="Nur säubern")
-pdf_format_label = Label(pdf_mode_frame, text="PDF‑Modus:", font=("Helvetica", 11), bg="#FFFFFF")
+pdf_format_var = StringVar(value="Metadaten entfernen")
+pdf_format_label = Label(pdf_mode_frame, text="Bearbeitungsmodus:", font=("Helvetica", 11), bg="#FFFFFF")
 pdf_format_label.pack(side="left", padx=(0,5))
 
-pdf_format_menu = OptionMenu(pdf_mode_frame, pdf_format_var, "Nur säubern", "Blista")
-pdf_format_menu.config(font=("Helvetica", 11), width=10, bg="white")
+pdf_format_menu = OptionMenu(pdf_mode_frame, pdf_format_var, "Metadaten entfernen", "Blista")
+pdf_format_menu.config(font=("Helvetica", 11), width=18, bg="white")
 pdf_format_menu.pack(side="left")
 pdf_mode_frame.grid(row=1, column=0, columnspan=2, pady=(0,10))
 
